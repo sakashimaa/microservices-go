@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package billing;
+
+option go_package = "github.com/sakashimaa/billing-microservice/contracts/gen/billing_pb";
+
+service BillingService {
+  rpc Deposit (DepositRequest) returns (DepositResponse);
+  rpc Withdraw (WithdrawRequest) returns (WithdrawResponse);
+}
+
+message DepositRequest {
+  int64 user_id = 1;
+  int64 amount = 2;
+}
+
+message DepositResponse {
+  bool success = 1;
+  string error_message = 2;
+}
+
+message WithdrawRequest {
+  int64 user_id = 1;
+  int64 amount = 2;
+}
+
+message WithdrawResponse {
+  bool success = 1;
+  string error_message = 2;
+}

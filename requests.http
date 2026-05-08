@@ -1,0 +1,17 @@
+### Пополнение (Создаст счет или добавит денег)
+POST http://localhost:8080/deposit
+Content-Type: application/json
+
+{
+  "user_id": 42,
+  "amount": 5000
+}
+
+### Списание (Проверь списание 1000 и попытку списать 999999)
+POST http://localhost:8080/withdraw
+Content-Type: application/json
+
+{
+  "user_id": 42,
+  "amount": 1000
+}
