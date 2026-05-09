@@ -2,13 +2,11 @@ package handlers
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 
 	"github.com/sakashimaa/billing-microservice/contracts/gen/billing_pb"
 	"github.com/sakashimaa/billing-microservice/pkg/utils/api"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
+	"github.com/sakashimaa/billing-microservice/pkg/utils/grpc"
 )
 
 type BillingRequest struct {
@@ -38,7 +36,7 @@ func (h *BillingHandler) WithdrawalHandler(w http.ResponseWriter, r *http.Reques
 		UserId: req.UserId,
 	})
 	if err != nil {
-		h.handleGRPCError(w, err)
+		grpc.HandleGRPCError(w, err)
 		return
 	}
 
@@ -58,29 +56,9 @@ func (h *BillingHandler) DepositHandler(w http.ResponseWriter, r *http.Request) 
 	})
 
 	if err != nil {
-		h.handleGRPCError(w, err)
+		grpc.HandleGRPCError(w, err)
 		return
 	}
 
 	api.SendJSON(w, http.StatusOK, "success", map[string]bool{"success": resp.Success})
-}
-
-func (h *BillingHandler) handleGRPCError(w http.ResponseWriter, err error) {
-	st, ok := status.FromError(err)
-	if !ok {
-		api.SendJSON(w, http.StatusInternalServerError, "error", "internal server error")
-		return
-	}
-
-	switch st.Code() {
-	case codes.InvalidArgument:
-		api.SendJSON(w, http.StatusBadRequest, "error", st.Message())
-	case codes.NotFound:
-		api.SendJSON(w, http.StatusNotFound, "error", st.Message())
-	case codes.FailedPrecondition:
-		api.SendJSON(w, http.StatusBadRequest, "error", st.Message())
-	default:
-		log.Printf("grpc error: %v", st.Message())
-		api.SendJSON(w, http.StatusInternalServerError, "error", st.Message())
-	}
 }

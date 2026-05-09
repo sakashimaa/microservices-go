@@ -1,9 +1,11 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 
+	"github.com/sakashimaa/billing-microservice/contracts/gen/auth_pb"
 	"github.com/sakashimaa/billing-microservice/contracts/gen/billing_pb"
 	"github.com/sakashimaa/billing-microservice/gateway/handlers"
 	"github.com/sakashimaa/billing-microservice/pkg/utils/env"
@@ -11,25 +13,42 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-type Gateway struct {
-	billingClient billing_pb.BillingServiceClient
-}
-
 func main() {
-	addr := env.ParseEnvWithFallback("BILLING_ADDR", "localhost:50051")
+	billingAddr := env.ParseEnvWithFallback("BILLING_ADDR", "localhost:50051")
+	authAddr := env.ParseEnvWithFallback("AUTH_ADDR", "localhost:50052")
 
-	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	billingConn, err := grpc.NewClient(billingAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Fatalf("failed to connect to billing using gRPC: %v\n", err)
 	}
-	defer conn.Close()
+	defer func(billingConn *grpc.ClientConn) {
+		if err = billingConn.Close(); err != nil {
+			fmt.Printf("failed to close connection to billing gRPC: %v\n", err)
+		}
+	}(billingConn)
 
-	client := billing_pb.NewBillingServiceClient(conn)
-	billingHandler := handlers.NewBillingHandler(client)
+	authConn, err := grpc.NewClient(authAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		log.Fatalf("failed to connect to auth using gRPC: %v\n", err)
+	}
+	defer func(authConn *grpc.ClientConn) {
+		if err = authConn.Close(); err != nil {
+			fmt.Printf("failed to close connection to auth gRPC: %v\n", err)
+		}
+	}(authConn)
+
+	billingClient := billing_pb.NewBillingServiceClient(billingConn)
+	billingHandler := handlers.NewBillingHandler(billingClient)
+
+	authClient := auth_pb.NewAuthServiceClient(authConn)
+	authHandler := handlers.NewAuthHandler(authClient)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /deposit", http.HandlerFunc(billingHandler.DepositHandler))
-	mux.HandleFunc("POST /withdraw", http.HandlerFunc(billingHandler.WithdrawalHandler))
+
+	mux.HandleFunc("POST /deposit", billingHandler.DepositHandler)
+	mux.HandleFunc("POST /withdraw", billingHandler.WithdrawalHandler)
+
+	mux.HandleFunc("POST /register", authHandler.Register)
 
 	log.Println("Gateway started on :8080")
 	if err := http.ListenAndServe(":8080", mux); err != nil {

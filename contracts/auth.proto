@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package auth;
+
+option go_package = "github.com/sakashimaa/billing-microservice/contracts/gen/auth_pb";
+
+service AuthService {
+  rpc Register (RegisterRequest) returns (RegisterResponse);
+}
+
+message RegisterRequest {
+  string email = 1;
+  string password = 2;
+}
+
+message RegisterResponse {
+  string id = 1;
+  string email = 2;
+  string created_at = 3;
+  string access_token = 4;
+  string refresh_token = 5;
+  bool success = 6;
+  string error_message = 7;
+}

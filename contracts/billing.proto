@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package billing;
 
-option go_package = "github.com/sakashimaa/billing-microservice/contracts/gen/billing_pb";
+option go_package = "github.com/sakashimaa/microservices-workspace/contracts/gen/billing_pb";
 
 service BillingService {
   rpc Deposit (DepositRequest) returns (DepositResponse);
