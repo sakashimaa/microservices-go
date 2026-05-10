@@ -11,5 +11,14 @@ services:
       - pg_data:/var/lib/postgresql/data
       - ./deploy/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
 
+  redis:
+    image: redis:8
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis:/data
+
 volumes:
   pg_data:
+  redis:
+    driver: local

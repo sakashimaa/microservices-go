@@ -6,6 +6,30 @@ option go_package = "github.com/sakashimaa/billing-microservice/contracts/gen/au
 
 service AuthService {
   rpc Register (RegisterRequest) returns (RegisterResponse);
+  rpc Login (LoginRequest) returns (LoginResponse);
+  rpc Refresh (RefreshRequest) returns (RefreshResponse);
+}
+
+message RefreshRequest {
+  string Refresh = 1;
+}
+
+message RefreshResponse {
+  string AccessToken = 1;
+  string RefreshToken = 2;
+}
+
+message LoginRequest {
+  string email = 1;
+  string password = 2;
+}
+
+message LoginResponse {
+  string id = 1;
+  string email = 2;
+  string created_at = 3;
+  string access_token = 4;
+  string refresh_token = 5;
 }
 
 message RegisterRequest {

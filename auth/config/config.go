@@ -2,6 +2,8 @@ package config
 
 import (
 	"fmt"
+	"log"
+	"os"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -9,15 +11,17 @@ import (
 )
 
 type Config struct {
-	Auth AuthConfig
+	Auth     AuthConfig
+	RedisUrl string
 }
 
 type AuthConfig struct {
-	AccessSecret  []byte
-	RefreshSecret []byte
-	AccessTTL     time.Duration
-	RefreshTTL    time.Duration
-	Issuer        string
+	AccessSecret    []byte
+	RefreshSecret   []byte
+	AccessTTL       time.Duration
+	RefreshTTL      time.Duration
+	Issuer          string
+	PrivateKeyBytes []byte
 }
 
 func Load() (Config, error) {
@@ -45,13 +49,22 @@ func Load() (Config, error) {
 	}
 
 	issuer := env.ParseEnvWithFallback("AUTH_ISSUER", "billing-auth-microservice")
+	redisUrl := env.ParseEnvWithFallback("REDIS_URL", "localhost:6379")
+
+	privateKeyBytes, err := os.ReadFile("private.pem")
+	if err != nil {
+		log.Fatalf("failed to read private.pem bytes: %v", err)
+	}
+
 	return Config{
+		RedisUrl: redisUrl,
 		Auth: AuthConfig{
-			AccessSecret:  accessSecret,
-			RefreshSecret: refreshSecret,
-			AccessTTL:     accessTTL,
-			RefreshTTL:    refreshTTL,
-			Issuer:        issuer,
+			AccessSecret:    accessSecret,
+			RefreshSecret:   refreshSecret,
+			AccessTTL:       accessTTL,
+			RefreshTTL:      refreshTTL,
+			Issuer:          issuer,
+			PrivateKeyBytes: privateKeyBytes,
 		},
 	}, nil
 }

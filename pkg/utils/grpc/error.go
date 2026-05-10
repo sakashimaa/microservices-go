@@ -23,6 +23,10 @@ func HandleGRPCError(w http.ResponseWriter, err error) {
 		api.SendJSON(w, http.StatusNotFound, "error", st.Message())
 	case codes.FailedPrecondition:
 		api.SendJSON(w, http.StatusBadRequest, "error", st.Message())
+	case codes.PermissionDenied:
+		api.SendJSON(w, http.StatusForbidden, "error", st.Message())
+	case codes.Unauthenticated:
+		api.SendJSON(w, http.StatusUnauthorized, "error", st.Message())
 	default:
 		log.Printf("grpc error: %v", st.Message())
 		api.SendJSON(w, http.StatusInternalServerError, "error", st.Message())

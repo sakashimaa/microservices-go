@@ -5,8 +5,10 @@ import (
 	"log"
 	"net"
 
+	"github.com/redis/go-redis/v9"
 	"github.com/sakashimaa/billing-microservice/auth/config"
 	"github.com/sakashimaa/billing-microservice/auth/repository"
+	redis2 "github.com/sakashimaa/billing-microservice/auth/repository/redis"
 	"github.com/sakashimaa/billing-microservice/auth/services"
 	"github.com/sakashimaa/billing-microservice/auth/tokens"
 	"github.com/sakashimaa/billing-microservice/contracts/gen/auth_pb"
@@ -27,9 +29,22 @@ func main() {
 	}
 	defer db.Close()
 
+	rdb := redis.NewClient(&redis.Options{
+		Addr: cfg.RedisUrl,
+	})
+	defer func() {
+		if err := rdb.Close(); err != nil {
+			log.Fatalf("failed to close redis: %v", err)
+		}
+	}()
+	if err := rdb.Ping(context.Background()).Err(); err != nil {
+		log.Fatalf("failed to ping redis: %v", err)
+	}
+
 	repo := repository.NewAuthRepository(db)
+	cacheRepo := redis2.NewTokenCache(rdb)
 	token := tokens.NewJWTManager(cfg.Auth)
-	authService := services.NewAuthService(repo, token)
+	authService := services.NewAuthService(repo, token, cfg.Auth, cacheRepo)
 	grpcHandler := NewGRPCHandler(authService)
 
 	grpcServer := grpc.NewServer()

@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/sakashimaa/billing-microservice/contracts/gen/auth_pb"
 	"github.com/sakashimaa/billing-microservice/contracts/gen/billing_pb"
 	"github.com/sakashimaa/billing-microservice/gateway/handlers"
@@ -41,7 +43,17 @@ func main() {
 	billingHandler := handlers.NewBillingHandler(billingClient)
 
 	authClient := auth_pb.NewAuthServiceClient(authConn)
-	authHandler := handlers.NewAuthHandler(authClient)
+
+	publicKeyBytes, err := os.ReadFile("public.pem")
+	if err != nil {
+		log.Fatalf("failed to read public key file: %v", err)
+	}
+	publicKey, err := jwt.ParseRSAPublicKeyFromPEM(publicKeyBytes)
+	if err != nil {
+		log.Fatalf("failed to parse public key from pem: %v", err)
+	}
+
+	authHandler := handlers.NewAuthHandler(authClient, publicKey)
 
 	mux := http.NewServeMux()
 
@@ -49,6 +61,9 @@ func main() {
 	mux.HandleFunc("POST /withdraw", billingHandler.WithdrawalHandler)
 
 	mux.HandleFunc("POST /register", authHandler.Register)
+	mux.HandleFunc("POST /login", authHandler.Login)
+	mux.HandleFunc("POST /refresh", authHandler.Refresh)
+	mux.HandleFunc("GET /me", authHandler.GetMe)
 
 	log.Println("Gateway started on :8080")
 	if err := http.ListenAndServe(":8080", mux); err != nil {

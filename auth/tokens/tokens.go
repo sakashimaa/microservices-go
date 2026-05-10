@@ -4,6 +4,7 @@ import (
 	rand2 "crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -21,22 +22,24 @@ type TokenManager interface {
 }
 
 type Manager struct {
-	accessSecret  []byte
-	refreshSecret []byte
-	accessTTL     time.Duration
-	refreshTTL    time.Duration
-	issuer        string
-	now           func() time.Time
+	accessSecret    []byte
+	refreshSecret   []byte
+	accessTTL       time.Duration
+	refreshTTL      time.Duration
+	issuer          string
+	now             func() time.Time
+	privateKeyBytes []byte
 }
 
 func NewJWTManager(cfg config.AuthConfig) *Manager {
 	return &Manager{
-		accessSecret:  cfg.AccessSecret,
-		refreshSecret: cfg.RefreshSecret,
-		accessTTL:     cfg.AccessTTL,
-		refreshTTL:    cfg.RefreshTTL,
-		issuer:        cfg.Issuer,
-		now:           time.Now,
+		accessSecret:    cfg.AccessSecret,
+		refreshSecret:   cfg.RefreshSecret,
+		accessTTL:       cfg.AccessTTL,
+		refreshTTL:      cfg.RefreshTTL,
+		issuer:          cfg.Issuer,
+		now:             time.Now,
+		privateKeyBytes: cfg.PrivateKeyBytes,
 	}
 }
 
@@ -46,12 +49,12 @@ type Claims struct {
 }
 
 func (m *Manager) GeneratePair(user domain.User) (domain.TokenPair, error) {
-	accessToken, accessExpiresAt, err := m.generate(user.Id, TokenTypeAccess, m.accessTTL, m.accessSecret)
+	accessToken, accessExpiresAt, err := m.generate(user.Id, TokenTypeAccess, m.accessTTL, m.privateKeyBytes)
 	if err != nil {
 		return domain.TokenPair{}, fmt.Errorf("generate access token: %w", err)
 	}
 
-	refreshToken, refreshExpiresAt, err := m.generate(user.Id, TokenTypeRefresh, m.refreshTTL, m.refreshSecret)
+	refreshToken, refreshExpiresAt, err := m.generate(user.Id, TokenTypeRefresh, m.refreshTTL, m.privateKeyBytes)
 	if err != nil {
 		return domain.TokenPair{}, fmt.Errorf("generate refresh token: %w", err)
 	}
@@ -64,7 +67,7 @@ func (m *Manager) GeneratePair(user domain.User) (domain.TokenPair, error) {
 	}, nil
 }
 
-func (m *Manager) generate(userID string, tokenType string, ttl time.Duration, secret []byte) (string, time.Time, error) {
+func (m *Manager) generate(userID string, tokenType string, ttl time.Duration, privateKeyBytes []byte) (string, time.Time, error) {
 	now := m.now().UTC()
 	expiresAt := now.Add(ttl)
 
@@ -84,9 +87,14 @@ func (m *Manager) generate(userID string, tokenType string, ttl time.Duration, s
 		},
 	}
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	privateKey, err := jwt.ParseRSAPrivateKeyFromPEM(privateKeyBytes)
+	if err != nil {
+		log.Fatalf("failed to get private RSA key from pem: %v", err)
+	}
 
-	signed, err := token.SignedString(secret)
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+
+	signed, err := token.SignedString(privateKey)
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("sign token: %w", err)
 	}
