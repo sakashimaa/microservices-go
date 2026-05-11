@@ -6,8 +6,10 @@ import (
 	"net"
 
 	"github.com/joho/godotenv"
+	"github.com/sakashimaa/billing-microservice/billing/repository"
 	"github.com/sakashimaa/billing-microservice/billing/services"
 	"github.com/sakashimaa/billing-microservice/contracts/gen/billing_pb"
+	"github.com/sakashimaa/billing-microservice/pkg/infrastructure/interceptors"
 	"github.com/sakashimaa/billing-microservice/pkg/utils/env"
 	"github.com/sakashimaa/billing-microservice/pkg/utils/storage"
 	"google.golang.org/grpc"
@@ -30,10 +32,13 @@ func main() {
 		log.Fatalf("failed to initialize pool: %v", err)
 	}
 
-	svc := services.NewBillingPGService(pool)
+	billingRepo := repository.NewBillingRepo(pool)
+	svc := services.NewBillingService(pool, billingRepo)
 	billingAdapter := NewGRPCServer(svc)
 
-	grpcServer := grpc.NewServer()
+	grpcServer := grpc.NewServer(
+		grpc.UnaryInterceptor(interceptors.AuthInterceptor()),
+	)
 	billing_pb.RegisterBillingServiceServer(grpcServer, billingAdapter)
 	reflection.Register(grpcServer)
 

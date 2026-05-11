@@ -6,14 +6,14 @@ type User struct {
 	Id        string
 	Email     string
 	Password  string
-	CreatedAt time.Time
+	CreatedAt *time.Time
 }
 
 type TokenPair struct {
 	AccessToken      string
 	RefreshToken     string
-	AccessExpiresAt  time.Time
-	RefreshExpiresAt time.Time
+	AccessExpiresAt  *time.Time
+	RefreshExpiresAt *time.Time
 }
 
 type RegisterRequest struct {
@@ -38,7 +38,7 @@ type GetUserByEmailParams struct {
 type RegisterResponse struct {
 	Id           string
 	Email        string
-	CreatedAt    time.Time
+	CreatedAt    *time.Time
 	AccessToken  string
 	RefreshToken string
 }
@@ -46,7 +46,7 @@ type RegisterResponse struct {
 type LoginResponse struct {
 	Id           string
 	Email        string
-	CreatedAt    time.Time
+	CreatedAt    *time.Time
 	AccessToken  string
 	RefreshToken string
 }
@@ -56,9 +56,9 @@ type SaveTokenParams struct {
 	Token      string
 	UserAgent  string
 	IpAddress  string
-	ExpiresAt  time.Time
+	ExpiresAt  *time.Time
 	Revoked    bool
-	ConsumedAt time.Time
+	ConsumedAt *time.Time
 	RevokedBy  string
 }
 
@@ -68,11 +68,11 @@ type Token struct {
 	Token      string
 	UserAgent  string
 	IpAddress  string
-	ExpiresAt  time.Time
+	ExpiresAt  *time.Time
 	Revoked    bool
 	ConsumedAt *time.Time
 	RevokedBy  *string
-	CreatedAt  time.Time
+	CreatedAt  *time.Time
 }
 
 type RefreshRequest struct {
@@ -82,4 +82,14 @@ type RefreshRequest struct {
 type RefreshResponse struct {
 	AccessToken  string
 	RefreshToken string
+}
+
+type GetMeRequest struct {
+	UserId string
+}
+
+type GetMeResponse struct {
+	Id        string
+	Email     string
+	CreatedAt *time.Time
 }

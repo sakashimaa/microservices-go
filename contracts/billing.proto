@@ -10,8 +10,8 @@ service BillingService {
 }
 
 message DepositRequest {
-  int64 user_id = 1;
   int64 amount = 2;
+  string idempotency_key = 3;
 }
 
 message DepositResponse {
@@ -20,8 +20,8 @@ message DepositResponse {
 }
 
 message WithdrawRequest {
-  int64 user_id = 1;
   int64 amount = 2;
+  string idempotency_key = 3;
 }
 
 message WithdrawResponse {

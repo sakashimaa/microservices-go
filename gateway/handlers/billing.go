@@ -1,39 +1,50 @@
 package handlers
 
 import (
+	"crypto/rsa"
 	"encoding/json"
 	"net/http"
 
 	"github.com/sakashimaa/billing-microservice/contracts/gen/billing_pb"
+	"github.com/sakashimaa/billing-microservice/gateway/middleware"
 	"github.com/sakashimaa/billing-microservice/pkg/utils/api"
 	"github.com/sakashimaa/billing-microservice/pkg/utils/grpc"
 )
 
 type BillingRequest struct {
-	UserID int64 `json:"user_id"`
-	Amount int64 `json:"amount"`
+	UserID         string `json:"user_id"`
+	Amount         int64  `json:"amount"`
+	IdempotencyKey string `json:"idempotency_key"`
 }
 
 type BillingHandler struct {
-	client billing_pb.BillingServiceClient
+	client    billing_pb.BillingServiceClient
+	publicKey *rsa.PublicKey
 }
 
-func NewBillingHandler(client billing_pb.BillingServiceClient) *BillingHandler {
+func NewBillingHandler(client billing_pb.BillingServiceClient, publicKey *rsa.PublicKey) *BillingHandler {
 	return &BillingHandler{
-		client: client,
+		client:    client,
+		publicKey: publicKey,
 	}
 }
 
 func (h *BillingHandler) WithdrawalHandler(w http.ResponseWriter, r *http.Request) {
+	enrichedReq, err := middleware.ValidateToken(r, h.publicKey)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+
 	var req billing_pb.WithdrawRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		api.SendJSON(w, http.StatusBadRequest, "error", "invalid json body")
 		return
 	}
 
-	resp, err := h.client.Withdraw(r.Context(), &billing_pb.WithdrawRequest{
-		Amount: req.Amount,
-		UserId: req.UserId,
+	resp, err := h.client.Withdraw(enrichedReq.Context(), &billing_pb.WithdrawRequest{
+		Amount:         req.Amount,
+		IdempotencyKey: req.IdempotencyKey,
 	})
 	if err != nil {
 		grpc.HandleGRPCError(w, err)
@@ -44,15 +55,21 @@ func (h *BillingHandler) WithdrawalHandler(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *BillingHandler) DepositHandler(w http.ResponseWriter, r *http.Request) {
+	enrichedReq, err := middleware.ValidateToken(r, h.publicKey)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+
 	var req BillingRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		api.SendJSON(w, http.StatusBadRequest, "error", "invalid json body")
 		return
 	}
 
-	resp, err := h.client.Deposit(r.Context(), &billing_pb.DepositRequest{
-		Amount: req.Amount,
-		UserId: req.UserID,
+	resp, err := h.client.Deposit(enrichedReq.Context(), &billing_pb.DepositRequest{
+		Amount:         req.Amount,
+		IdempotencyKey: req.IdempotencyKey,
 	})
 
 	if err != nil {

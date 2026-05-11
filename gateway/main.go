@@ -39,11 +39,6 @@ func main() {
 		}
 	}(authConn)
 
-	billingClient := billing_pb.NewBillingServiceClient(billingConn)
-	billingHandler := handlers.NewBillingHandler(billingClient)
-
-	authClient := auth_pb.NewAuthServiceClient(authConn)
-
 	publicKeyBytes, err := os.ReadFile("public.pem")
 	if err != nil {
 		log.Fatalf("failed to read public key file: %v", err)
@@ -52,6 +47,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to parse public key from pem: %v", err)
 	}
+
+	billingClient := billing_pb.NewBillingServiceClient(billingConn)
+	billingHandler := handlers.NewBillingHandler(billingClient, publicKey)
+
+	authClient := auth_pb.NewAuthServiceClient(authConn)
 
 	authHandler := handlers.NewAuthHandler(authClient, publicKey)
 

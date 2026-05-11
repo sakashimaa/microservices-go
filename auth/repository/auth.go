@@ -25,6 +25,8 @@ type AuthRepository interface {
 	GetTokenForUpdateTx(ctx context.Context, tx pgx.Tx, hashStr string) (*domain.Token, error)
 	RevokeAllUserTokensTx(ctx context.Context, tx pgx.Tx, userId string) error
 	MarkTokenAsConsumedTx(ctx context.Context, tx pgx.Tx, oldHashStr string, newHashStr string) error
+	GetUserById(ctx context.Context, userId string) (*domain.User, error)
+	DeleteExpiredTokens(ctx context.Context, limit int) error
 }
 
 func NewAuthRepository(db *pgxpool.Pool) AuthRepository {
@@ -39,6 +41,53 @@ type AuthPGRepo struct {
 
 func (r *AuthPGRepo) BeginTx(ctx context.Context) (pgx.Tx, error) {
 	return r.db.Begin(ctx)
+}
+
+func (r *AuthPGRepo) DeleteExpiredTokens(ctx context.Context, limit int) error {
+	query := `
+		DELETE FROM refresh_tokens
+		WHERE id IN (
+			SELECT id
+			FROM refresh_tokens
+			WHERE expires_at < NOW()
+			LIMIT $1
+			FOR UPDATE SKIP LOCKED
+		);
+	`
+
+	_, err := r.db.Exec(ctx, query, limit)
+	if err != nil {
+		return fmt.Errorf("delete expired tokens: %w", err)
+	}
+
+	return nil
+}
+
+func (r *AuthPGRepo) GetUserById(ctx context.Context, userId string) (*domain.User, error) {
+	query := `
+		SELECT id, email, created_at
+		FROM users
+		WHERE id = $1
+	`
+
+	var res domain.User
+	if err := r.db.QueryRow(
+		ctx,
+		query,
+		userId,
+	).Scan(
+		&res.Id,
+		&res.Email,
+		&res.CreatedAt,
+	); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrUserNotFound
+		}
+
+		return nil, fmt.Errorf("failed to query user: %w", err)
+	}
+
+	return &res, nil
 }
 
 func (r *AuthPGRepo) SaveRefreshTx(ctx context.Context, tx pgx.Tx, data domain.SaveTokenParams) error {

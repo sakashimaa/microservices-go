@@ -1,7 +1,7 @@
 -- +goose Up
 CREATE TABLE IF NOT EXISTS accounts (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-    user_id BIGINT UNIQUE NOT NULL,
+    user_id uuid UNIQUE NOT NULL,
     balance BIGINT NOT NULL DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

@@ -62,8 +62,8 @@ func (m *Manager) GeneratePair(user domain.User) (domain.TokenPair, error) {
 	return domain.TokenPair{
 		AccessToken:      accessToken,
 		RefreshToken:     refreshToken,
-		AccessExpiresAt:  accessExpiresAt,
-		RefreshExpiresAt: refreshExpiresAt,
+		AccessExpiresAt:  &accessExpiresAt,
+		RefreshExpiresAt: &refreshExpiresAt,
 	}, nil
 }
 

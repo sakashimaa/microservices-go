@@ -22,11 +22,11 @@ const (
 )
 
 type DepositRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	UserId        int64                  `protobuf:"varint,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
-	Amount        int64                  `protobuf:"varint,2,opt,name=amount,proto3" json:"amount,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Amount         int64                  `protobuf:"varint,2,opt,name=amount,proto3" json:"amount,omitempty"`
+	IdempotencyKey string                 `protobuf:"bytes,3,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *DepositRequest) Reset() {
@@ -59,18 +59,18 @@ func (*DepositRequest) Descriptor() ([]byte, []int) {
 	return file_billing_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *DepositRequest) GetUserId() int64 {
-	if x != nil {
-		return x.UserId
-	}
-	return 0
-}
-
 func (x *DepositRequest) GetAmount() int64 {
 	if x != nil {
 		return x.Amount
 	}
 	return 0
+}
+
+func (x *DepositRequest) GetIdempotencyKey() string {
+	if x != nil {
+		return x.IdempotencyKey
+	}
+	return ""
 }
 
 type DepositResponse struct {
@@ -126,11 +126,11 @@ func (x *DepositResponse) GetErrorMessage() string {
 }
 
 type WithdrawRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	UserId        int64                  `protobuf:"varint,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
-	Amount        int64                  `protobuf:"varint,2,opt,name=amount,proto3" json:"amount,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Amount         int64                  `protobuf:"varint,2,opt,name=amount,proto3" json:"amount,omitempty"`
+	IdempotencyKey string                 `protobuf:"bytes,3,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *WithdrawRequest) Reset() {
@@ -163,18 +163,18 @@ func (*WithdrawRequest) Descriptor() ([]byte, []int) {
 	return file_billing_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *WithdrawRequest) GetUserId() int64 {
-	if x != nil {
-		return x.UserId
-	}
-	return 0
-}
-
 func (x *WithdrawRequest) GetAmount() int64 {
 	if x != nil {
 		return x.Amount
 	}
 	return 0
+}
+
+func (x *WithdrawRequest) GetIdempotencyKey() string {
+	if x != nil {
+		return x.IdempotencyKey
+	}
+	return ""
 }
 
 type WithdrawResponse struct {
@@ -233,22 +233,22 @@ var File_billing_proto protoreflect.FileDescriptor
 
 const file_billing_proto_rawDesc = "" +
 	"\n" +
-	"\rbilling.proto\x12\abilling\"A\n" +
-	"\x0eDepositRequest\x12\x17\n" +
-	"\auser_id\x18\x01 \x01(\x03R\x06userId\x12\x16\n" +
-	"\x06amount\x18\x02 \x01(\x03R\x06amount\"P\n" +
+	"\rbilling.proto\x12\abilling\"Q\n" +
+	"\x0eDepositRequest\x12\x16\n" +
+	"\x06amount\x18\x02 \x01(\x03R\x06amount\x12'\n" +
+	"\x0fidempotency_key\x18\x03 \x01(\tR\x0eidempotencyKey\"P\n" +
 	"\x0fDepositResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12#\n" +
-	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\"B\n" +
-	"\x0fWithdrawRequest\x12\x17\n" +
-	"\auser_id\x18\x01 \x01(\x03R\x06userId\x12\x16\n" +
-	"\x06amount\x18\x02 \x01(\x03R\x06amount\"Q\n" +
+	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\"R\n" +
+	"\x0fWithdrawRequest\x12\x16\n" +
+	"\x06amount\x18\x02 \x01(\x03R\x06amount\x12'\n" +
+	"\x0fidempotency_key\x18\x03 \x01(\tR\x0eidempotencyKey\"Q\n" +
 	"\x10WithdrawResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12#\n" +
 	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage2\x8f\x01\n" +
 	"\x0eBillingService\x12<\n" +
 	"\aDeposit\x12\x17.billing.DepositRequest\x1a\x18.billing.DepositResponse\x12?\n" +
-	"\bWithdraw\x12\x18.billing.WithdrawRequest\x1a\x19.billing.WithdrawResponseBEZCgithub.com/sakashimaa/billing-microservice/contracts/gen/billing_pbb\x06proto3"
+	"\bWithdraw\x12\x18.billing.WithdrawRequest\x1a\x19.billing.WithdrawResponseBHZFgithub.com/sakashimaa/microservices-workspace/contracts/gen/billing_pbb\x06proto3"
 
 var (
 	file_billing_proto_rawDescOnce sync.Once

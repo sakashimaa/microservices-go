@@ -3,7 +3,6 @@ POST http://localhost:8080/deposit
 Content-Type: application/json
 
 {
-  "user_id": 42,
   "amount": 5000
 }
 
@@ -12,6 +11,5 @@ POST http://localhost:8080/withdraw
 Content-Type: application/json
 
 {
-  "user_id": 42,
   "amount": 1000
 }

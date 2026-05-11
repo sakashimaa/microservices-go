@@ -11,6 +11,12 @@ import (
 	"github.com/sakashimaa/billing-microservice/pkg/utils/grpc"
 )
 
+type GetMeHTTPResponse struct {
+	Id        string `json:"id"`
+	Email     string `json:"email"`
+	CreatedAt string `json:"created_at"`
+}
+
 type RefreshRequest struct {
 	RefreshToken string `json:"refresh_token"`
 }
@@ -136,8 +142,15 @@ func (h *AuthHandler) GetMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userId := enrichedReq.Context().Value(middleware.UserIDKey)
-	api.SendJSON(w, http.StatusOK, "success", map[string]any{
-		"user_id": userId,
+	res, err := h.client.GetMe(enrichedReq.Context(), &auth_pb.GetMeRequest{})
+	if err != nil {
+		grpc.HandleGRPCError(w, err)
+		return
+	}
+
+	api.SendJSON(w, http.StatusOK, "success", GetMeHTTPResponse{
+		Id:        res.Id,
+		Email:     res.Email,
+		CreatedAt: res.CreatedAt,
 	})
 }

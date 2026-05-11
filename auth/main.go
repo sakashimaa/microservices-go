@@ -4,14 +4,19 @@ import (
 	"context"
 	"log"
 	"net"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/redis/go-redis/v9"
 	"github.com/sakashimaa/billing-microservice/auth/config"
+	"github.com/sakashimaa/billing-microservice/auth/lib/workers"
 	"github.com/sakashimaa/billing-microservice/auth/repository"
 	redis2 "github.com/sakashimaa/billing-microservice/auth/repository/redis"
 	"github.com/sakashimaa/billing-microservice/auth/services"
 	"github.com/sakashimaa/billing-microservice/auth/tokens"
 	"github.com/sakashimaa/billing-microservice/contracts/gen/auth_pb"
+	"github.com/sakashimaa/billing-microservice/pkg/infrastructure/interceptors"
 	"github.com/sakashimaa/billing-microservice/pkg/utils/env"
 	"github.com/sakashimaa/billing-microservice/pkg/utils/storage"
 	"google.golang.org/grpc"
@@ -41,13 +46,21 @@ func main() {
 		log.Fatalf("failed to ping redis: %v", err)
 	}
 
-	repo := repository.NewAuthRepository(db)
+	authRepo := repository.NewAuthRepository(db)
 	cacheRepo := redis2.NewTokenCache(rdb)
 	token := tokens.NewJWTManager(cfg.Auth)
-	authService := services.NewAuthService(repo, token, cfg.Auth, cacheRepo)
+	authService := services.NewAuthService(authRepo, token, cfg.Auth, cacheRepo)
 	grpcHandler := NewGRPCHandler(authService)
 
-	grpcServer := grpc.NewServer()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	limit := env.ParseEnvWithFallback("REFRESH_WORKER_LIMIT", 5000)
+	go workers.StartCleanupWorker(ctx, authRepo, limit)
+
+	grpcServer := grpc.NewServer(
+		grpc.UnaryInterceptor(interceptors.AuthInterceptor()),
+	)
 	auth_pb.RegisterAuthServiceServer(grpcServer, grpcHandler)
 
 	lis, err := net.Listen("tcp", ":50052")
@@ -55,8 +68,21 @@ func main() {
 		log.Fatalf("failed to start grpc on 50052")
 	}
 
-	log.Println("server is listening on 50052")
-	if err = grpcServer.Serve(lis); err != nil {
-		log.Fatalf("failed to serve grpc: %v", err)
+	errCh := make(chan error, 1)
+	go func() {
+		log.Println("server is listening on 50052")
+		if err := grpcServer.Serve(lis); err != nil {
+			errCh <- err
+		}
+	}()
+
+	select {
+	case <-ctx.Done():
+		log.Println("OS signal received, initiating graceful shutdown...")
+
+		grpcServer.GracefulStop()
+		log.Println("Server stopped properly")
+	case err := <-errCh:
+		log.Fatalf("gRPC server crashed: %v", err)
 	}
 }
