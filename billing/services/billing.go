@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -64,6 +65,18 @@ func (s *BillingPGService) Deposit(ctx context.Context, req domain.DepositReques
 		}
 
 		return fmt.Errorf("insert transaction failed: %w", err)
+	}
+
+	payload := map[string]any{
+		"user_id":   req.UserId,
+		"amount":    req.Amount,
+		"tx_type":   "deposit",
+		"timestamp": time.Now().UTC().Format(time.RFC3339),
+	}
+
+	err = s.repo.InsertOutboxEventTx(ctx, tx, "AccountToppedUp", accountId, payload)
+	if err != nil {
+		return fmt.Errorf("failed to write outbox: %w", err)
 	}
 
 	return tx.Commit(ctx)

@@ -24,6 +24,7 @@ type BillingRepository interface {
 	GetAccountByUserIdTx(ctx context.Context, tx pgx.Tx, params domain.GetAccountByUserIdParams) (*domain.Account, error)
 	FindByIdempotencyKey(ctx context.Context, params domain.FindByIdempotencyKeyParams) (*domain.Transaction, error)
 	WithdrawAccountTx(ctx context.Context, tx pgx.Tx, params domain.WithdrawAccountParams) error
+	InsertOutboxEventTx(ctx context.Context, tx pgx.Tx, eventType, aggregateId string, payload any) error
 }
 
 func NewBillingRepo(db *pgxpool.Pool) BillingRepository {
@@ -34,6 +35,20 @@ func NewBillingRepo(db *pgxpool.Pool) BillingRepository {
 
 type BillingPGRepo struct {
 	db *pgxpool.Pool
+}
+
+func (r *BillingPGRepo) InsertOutboxEventTx(ctx context.Context, tx pgx.Tx, eventType, aggregateId string, payload any) error {
+	query := `
+		INSERT INTO outbox_events (aggregate_type, aggregate_id, event_type, payload)
+		VALUES ('account', $1, $2, $3)
+	`
+
+	_, err := tx.Exec(ctx, query, aggregateId, eventType, payload)
+	if err != nil {
+		return fmt.Errorf("insert outbox: %w", err)
+	}
+
+	return nil
 }
 
 func (r *BillingPGRepo) WithdrawAccountTx(ctx context.Context, tx pgx.Tx, params domain.WithdrawAccountParams) error {
