@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sakashimaa/billing-microservice/billing/domain"
 	"github.com/sakashimaa/billing-microservice/billing/repository"
@@ -55,15 +56,8 @@ func (s *BillingPGService) Deposit(ctx context.Context, req domain.DepositReques
 	})
 	if err != nil {
 		if errors.Is(err, repository.ErrIdempotencyConflict) {
-			if err := tx.Rollback(ctx); err != nil {
-				return fmt.Errorf("deposit transaction rollback: %w", err)
-			}
-
-			_, fetchErr := s.repo.FindByIdempotencyKey(ctx, domain.FindByIdempotencyKeyParams{
-				IdempotencyKey: req.IdempotencyKey,
-			})
-			if fetchErr != nil {
-				return fmt.Errorf("failed to fetch idempotent transaction: %w", err)
+			if err := s.handleIdempotencyError(ctx, tx, req.IdempotencyKey); err != nil {
+				return fmt.Errorf("idempotency error: %w", err)
 			}
 
 			return nil
@@ -82,43 +76,57 @@ func (s *BillingPGService) Withdraw(ctx context.Context, req domain.WithdrawRequ
 	}
 	defer tx.Rollback(ctx)
 
-	var accountID string
-	var balance int64
-
-	err = tx.QueryRow(ctx, `
-		SELECT id, balance
-		FROM accounts
-		WHERE user_id = $1
-		FOR UPDATE
-	`, req.UserId).Scan(&accountID, &balance)
+	res, err := s.repo.GetAccountByUserIdTx(ctx, tx, domain.GetAccountByUserIdParams{
+		UserId: req.UserId,
+	})
 	if err != nil {
-		if err.Error() == "no rows in result set" {
-			return ErrAccountNotFound
-		}
-
-		return fmt.Errorf("failed to query account: %w", err)
+		return fmt.Errorf("withdraw: %w", err)
 	}
 
-	if balance < req.Amount {
+	if res.Balance < req.Amount {
 		return ErrInsufficientFunds
 	}
 
-	_, err = tx.Exec(ctx, `
-		UPDATE accounts
-		SET balance = balance - $1
-		WHERE id = $2
-	`, req.Amount, accountID)
+	err = s.repo.WithdrawAccountTx(ctx, tx, domain.WithdrawAccountParams{
+		Amount: req.Amount,
+		Id:     res.Id,
+	})
 	if err != nil {
 		return fmt.Errorf("failed to update balance: %w", err)
 	}
 
-	_, err = tx.Exec(ctx, `
-		INSERT INTO transactions (account_id, amount, type)
-		VALUES ($1, $2, 'withdrawal')
-	`, accountID, req.Amount)
+	err = s.repo.InsertTransactionTx(ctx, tx, domain.InsertTransactionParams{
+		AccountId:      res.Id,
+		Amount:         req.Amount,
+		IdempotencyKey: req.IdempotencyKey,
+		Type:           "withdrawal",
+	})
 	if err != nil {
+		if errors.Is(err, repository.ErrIdempotencyConflict) {
+			if err := s.handleIdempotencyError(ctx, tx, req.IdempotencyKey); err != nil {
+				return fmt.Errorf("idempotency error: %w", err)
+			}
+
+			return nil
+		}
+
 		return fmt.Errorf("failed to insert transaction: %w", err)
 	}
 
 	return tx.Commit(ctx)
+}
+
+func (s *BillingPGService) handleIdempotencyError(ctx context.Context, tx pgx.Tx, idempotencyKey string) error {
+	if err := tx.Rollback(ctx); err != nil {
+		return fmt.Errorf("deposit transaction rollback: %w", err)
+	}
+
+	_, fetchErr := s.repo.FindByIdempotencyKey(ctx, domain.FindByIdempotencyKeyParams{
+		IdempotencyKey: idempotencyKey,
+	})
+	if fetchErr != nil {
+		return fmt.Errorf("failed to fetch idempotent transaction: %w", fetchErr)
+	}
+
+	return nil
 }

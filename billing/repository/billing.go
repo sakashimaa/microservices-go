@@ -15,12 +15,15 @@ import (
 var (
 	ErrIdempotencyConflict = errors.New("idempotency key already exists")
 	ErrTransactionNotFound = errors.New("transaction not found")
+	ErrAccountNotFound     = errors.New("account not found")
 )
 
 type BillingRepository interface {
 	TopUpAccountTx(ctx context.Context, tx pgx.Tx, params domain.TopUpAccountParams) (string, error)
 	InsertTransactionTx(ctx context.Context, tx pgx.Tx, params domain.InsertTransactionParams) error
+	GetAccountByUserIdTx(ctx context.Context, tx pgx.Tx, params domain.GetAccountByUserIdParams) (*domain.Account, error)
 	FindByIdempotencyKey(ctx context.Context, params domain.FindByIdempotencyKeyParams) (*domain.Transaction, error)
+	WithdrawAccountTx(ctx context.Context, tx pgx.Tx, params domain.WithdrawAccountParams) error
 }
 
 func NewBillingRepo(db *pgxpool.Pool) BillingRepository {
@@ -31,6 +34,42 @@ func NewBillingRepo(db *pgxpool.Pool) BillingRepository {
 
 type BillingPGRepo struct {
 	db *pgxpool.Pool
+}
+
+func (r *BillingPGRepo) WithdrawAccountTx(ctx context.Context, tx pgx.Tx, params domain.WithdrawAccountParams) error {
+	query := `
+		UPDATE accounts
+		SET balance = balance - $1
+		WHERE id = $2
+	`
+
+	_, err := tx.Exec(ctx, query, params.Amount, params.Id)
+	if err != nil {
+		return fmt.Errorf("withdraw account: %w", err)
+	}
+
+	return nil
+}
+
+func (r *BillingPGRepo) GetAccountByUserIdTx(ctx context.Context, tx pgx.Tx, params domain.GetAccountByUserIdParams) (*domain.Account, error) {
+	var res domain.Account
+	query := `
+		SELECT id, user_id, balance, created_at
+		FROM accounts
+		WHERE user_id = $1
+		FOR UPDATE
+	`
+
+	err := tx.QueryRow(ctx, query, params.UserId).Scan(&res.Id, &res.UserId, &res.Balance, &res.CreatedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrAccountNotFound
+		}
+
+		return nil, fmt.Errorf("failed to query account: %w", err)
+	}
+
+	return &res, nil
 }
 
 func (r *BillingPGRepo) FindByIdempotencyKey(ctx context.Context, params domain.FindByIdempotencyKeyParams) (*domain.Transaction, error) {
@@ -66,8 +105,8 @@ func (r *BillingPGRepo) FindByIdempotencyKey(ctx context.Context, params domain.
 func (r *BillingPGRepo) InsertTransactionTx(ctx context.Context, tx pgx.Tx, params domain.InsertTransactionParams) error {
 	_, err := tx.Exec(ctx, `
 		INSERT INTO transactions (account_id, amount, type, idempotency_key)
-		VALUES ($1, $2, 'deposit', $3)
-	`, params.AccountId, params.Amount, params.IdempotencyKey)
+		VALUES ($1, $2, $3, $4)
+	`, params.AccountId, params.Amount, params.Type, params.IdempotencyKey)
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) {
