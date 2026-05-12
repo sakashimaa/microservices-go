@@ -55,7 +55,7 @@ func (w *OutboxWorker) processOutboxBatch() {
 
 	events, err := w.repo.QueryOutboxEventsTx(w.ctx, tx, 100)
 	if err != nil {
-		fmt.Printf("outbox: %v", err)
+		fmt.Printf("outbox: %v\n", err)
 		return
 	}
 	if len(events) == 0 {

@@ -66,7 +66,7 @@ type OutboxEvent struct {
 	EventType     string
 	Payload       map[string]any
 	Status        string
-	ErrorText     string
+	ErrorText     *string
 	CreatedAt     *time.Time
 	ProcessedAt   *time.Time
 }
