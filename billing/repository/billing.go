@@ -25,6 +25,9 @@ type BillingRepository interface {
 	FindByIdempotencyKey(ctx context.Context, params domain.FindByIdempotencyKeyParams) (*domain.Transaction, error)
 	WithdrawAccountTx(ctx context.Context, tx pgx.Tx, params domain.WithdrawAccountParams) error
 	InsertOutboxEventTx(ctx context.Context, tx pgx.Tx, eventType, aggregateId string, payload any) error
+	QueryOutboxEventsTx(ctx context.Context, tx pgx.Tx, limit int) ([]*domain.OutboxEvent, error)
+	MarkEventsAsProcessedTx(ctx context.Context, tx pgx.Tx, eventIds []int64) (int64, error)
+	BeginTx(ctx context.Context) (pgx.Tx, error)
 }
 
 func NewBillingRepo(db *pgxpool.Pool) BillingRepository {
@@ -35,6 +38,69 @@ func NewBillingRepo(db *pgxpool.Pool) BillingRepository {
 
 type BillingPGRepo struct {
 	db *pgxpool.Pool
+}
+
+func (r *BillingPGRepo) MarkEventsAsProcessedTx(ctx context.Context, tx pgx.Tx, eventIds []int64) (int64, error) {
+	query := `
+		UPDATE outbox_events
+		SET status = 'PROCESSED', processed_at = NOW()
+		WHERE id = ANY($1)
+	`
+
+	cmdTag, err := tx.Exec(ctx, query, eventIds)
+	if err != nil {
+		return 0, fmt.Errorf("failed to mark events as processed: %w", err)
+	}
+
+	return cmdTag.RowsAffected(), nil
+}
+
+func (r *BillingPGRepo) BeginTx(ctx context.Context) (pgx.Tx, error) {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("transaction start failed: %w", err)
+	}
+
+	return tx, nil
+}
+
+func (r *BillingPGRepo) QueryOutboxEventsTx(ctx context.Context, tx pgx.Tx, limit int) ([]*domain.OutboxEvent, error) {
+	query := `
+		SELECT id, aggregate_type, aggregate_id, event_type,
+				payload, status, error_text, processed_at
+		FROM outbox_events
+		WHERE status = 'PENDING'
+		ORDER BY id ASC
+		LIMIT $1
+		FOR UPDATE SKIP LOCKED
+	`
+
+	rows, err := tx.Query(ctx, query, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query outbox: %w", err)
+	}
+	defer rows.Close()
+
+	var res []*domain.OutboxEvent
+	for rows.Next() {
+		var e domain.OutboxEvent
+		if err := rows.Scan(
+			&e.Id,
+			&e.AggregateType,
+			&e.AggregateId,
+			&e.EventType,
+			&e.Payload,
+			&e.Status,
+			&e.ErrorText,
+			&e.ProcessedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan failed: %w", err)
+		}
+
+		res = append(res, &e)
+	}
+
+	return res, nil
 }
 
 func (r *BillingPGRepo) InsertOutboxEventTx(ctx context.Context, tx pgx.Tx, eventType, aggregateId string, payload any) error {

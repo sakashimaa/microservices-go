@@ -4,8 +4,14 @@ import (
 	"context"
 	"log"
 	"net"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/joho/godotenv"
+	amqp "github.com/rabbitmq/amqp091-go"
+	"github.com/sakashimaa/billing-microservice/billing/lib/broker"
+	"github.com/sakashimaa/billing-microservice/billing/lib/workers"
 	"github.com/sakashimaa/billing-microservice/billing/repository"
 	"github.com/sakashimaa/billing-microservice/billing/services"
 	"github.com/sakashimaa/billing-microservice/contracts/gen/billing_pb"
@@ -32,9 +38,51 @@ func main() {
 		log.Fatalf("failed to initialize pool: %v", err)
 	}
 
+	conn, err := amqp.Dial(env.ParseEnvWithFallback("BROKER_URL", ""))
+	if err != nil {
+		log.Fatalf("failed to connect to RabbitMQ")
+	}
+	defer func() {
+		if err := conn.Close(); err != nil {
+			log.Fatalf("failed to close connection to RabbitMQ")
+		}
+	}()
+
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, os.Interrupt)
+	defer stop()
+
 	billingRepo := repository.NewBillingRepo(pool)
 	svc := services.NewBillingService(pool, billingRepo)
 	billingAdapter := NewGRPCServer(svc)
+
+	ch, err := conn.Channel()
+	if err != nil {
+		log.Fatalf("failed to open a channel: %v\n", err)
+	}
+	defer func() {
+		if err := ch.Close(); err != nil {
+			log.Fatalf("failed to close channel: %v\n", err)
+		}
+	}()
+
+	exchangeName := "billing.events"
+	err = ch.ExchangeDeclare(
+		exchangeName,
+		"topic",
+		true,
+		false,
+		false,
+		false,
+		nil,
+	)
+	if err != nil {
+		log.Fatalf("failed to declare an exchange: %v\n", err)
+	}
+
+	rabbitPublisher := broker.NewRabbitPublisher(ch, exchangeName)
+
+	outboxWorker := workers.NewOutboxWorker(ctx, billingRepo, rabbitPublisher)
+	go outboxWorker.StartOutboxWorker()
 
 	grpcServer := grpc.NewServer(
 		grpc.UnaryInterceptor(interceptors.AuthInterceptor()),
@@ -47,8 +95,21 @@ func main() {
 		log.Fatalf("failed to listen on port 50051: %v\n", err)
 	}
 
-	log.Println("Server is listening on :50051")
-	if err = grpcServer.Serve(lis); err != nil {
-		log.Fatalf("failed to server gRPC: %v\n", err)
+	errCh := make(chan error, 1)
+	go func() {
+		log.Println("Server is listening on :50051")
+		if err = grpcServer.Serve(lis); err != nil {
+			errCh <- err
+		}
+	}()
+
+	select {
+	case <-ctx.Done():
+		log.Println("OS shutdown signal received, initiating graceful shutdown...")
+
+		grpcServer.GracefulStop()
+		log.Println("server stopped successfully")
+	case err := <-errCh:
+		log.Fatalf("failed to start: %v", err)
 	}
 }
