@@ -14,6 +14,7 @@ import (
 	"github.com/sakashimaa/billing-microservice/contracts/gen/auth_pb"
 	"github.com/sakashimaa/billing-microservice/contracts/gen/billing_pb"
 	"github.com/sakashimaa/billing-microservice/gateway/handlers"
+	"github.com/sakashimaa/billing-microservice/gateway/lib/breaker"
 	"github.com/sakashimaa/billing-microservice/gateway/middleware"
 	"github.com/sakashimaa/billing-microservice/pkg/utils/env"
 	"google.golang.org/grpc"
@@ -70,12 +71,15 @@ func main() {
 		log.Fatalf("failed to parse public key from pem: %v", err)
 	}
 
+	billingCb := breaker.NewStandardCircuitBreaker("BillingService")
+	authCb := breaker.NewStandardCircuitBreaker("AuthService")
+
 	billingClient := billing_pb.NewBillingServiceClient(billingConn)
-	billingHandler := handlers.NewBillingHandler(billingClient, publicKey)
+	billingHandler := handlers.NewBillingHandler(billingClient, publicKey, billingCb)
 
 	authClient := auth_pb.NewAuthServiceClient(authConn)
 
-	authHandler := handlers.NewAuthHandler(authClient, publicKey)
+	authHandler := handlers.NewAuthHandler(authClient, publicKey, authCb)
 
 	mux := http.NewServeMux()
 

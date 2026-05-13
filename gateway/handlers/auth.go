@@ -3,12 +3,14 @@ package handlers
 import (
 	"crypto/rsa"
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/sakashimaa/billing-microservice/contracts/gen/auth_pb"
 	"github.com/sakashimaa/billing-microservice/gateway/middleware"
 	"github.com/sakashimaa/billing-microservice/pkg/utils/api"
 	"github.com/sakashimaa/billing-microservice/pkg/utils/grpc"
+	"github.com/sony/gobreaker"
 )
 
 type GetMeHTTPResponse struct {
@@ -56,12 +58,14 @@ type RegisterHTTPResponse struct {
 type AuthHandler struct {
 	client    auth_pb.AuthServiceClient
 	publicKey *rsa.PublicKey
+	cb        *gobreaker.CircuitBreaker
 }
 
-func NewAuthHandler(client auth_pb.AuthServiceClient, publicKey *rsa.PublicKey) *AuthHandler {
+func NewAuthHandler(client auth_pb.AuthServiceClient, publicKey *rsa.PublicKey, cb *gobreaker.CircuitBreaker) *AuthHandler {
 	return &AuthHandler{
 		client:    client,
 		publicKey: publicKey,
+		cb:        cb,
 	}
 }
 
@@ -72,14 +76,23 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, err := h.client.Refresh(r.Context(), &auth_pb.RefreshRequest{
-		Refresh: req.RefreshToken,
+	result, err := h.cb.Execute(func() (interface{}, error) {
+		return h.client.Refresh(r.Context(), &auth_pb.RefreshRequest{
+			Refresh: req.RefreshToken,
+		})
 	})
+
 	if err != nil {
+		if errors.Is(err, gobreaker.ErrOpenState) {
+			api.SendJSON(w, http.StatusServiceUnavailable, "error", "service unavailable. Try again later")
+			return
+		}
+
 		grpc.HandleGRPCError(w, err)
 		return
 	}
 
+	resp := result.(*auth_pb.RefreshResponse)
 	api.SendJSON(w, http.StatusOK, "success", RefreshHTTPResponse{
 		AccessToken:  resp.AccessToken,
 		RefreshToken: resp.RefreshToken,
@@ -93,15 +106,23 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, err := h.client.Login(r.Context(), &auth_pb.LoginRequest{
-		Email:    req.Email,
-		Password: req.Password,
+	result, err := h.cb.Execute(func() (interface{}, error) {
+		return h.client.Login(r.Context(), &auth_pb.LoginRequest{
+			Email:    req.Email,
+			Password: req.Password,
+		})
 	})
 	if err != nil {
+		if errors.Is(err, gobreaker.ErrOpenState) {
+			api.SendJSON(w, http.StatusServiceUnavailable, "error", "service unavailable. Try again later")
+			return
+		}
+
 		grpc.HandleGRPCError(w, err)
 		return
 	}
 
+	resp := result.(*auth_pb.LoginResponse)
 	api.SendJSON(w, http.StatusOK, "success", LoginHTTPResponse{
 		Id:           resp.Id,
 		Email:        resp.Email,
@@ -118,15 +139,24 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, err := h.client.Register(r.Context(), &auth_pb.RegisterRequest{
-		Email:    req.Email,
-		Password: req.Password,
+	result, err := h.cb.Execute(func() (interface{}, error) {
+		return h.client.Register(r.Context(), &auth_pb.RegisterRequest{
+			Email:    req.Email,
+			Password: req.Password,
+		})
 	})
+
 	if err != nil {
+		if errors.Is(err, gobreaker.ErrOpenState) {
+			api.SendJSON(w, http.StatusServiceUnavailable, "error", "service unavailable. Try again later")
+			return
+		}
+
 		grpc.HandleGRPCError(w, err)
 		return
 	}
 
+	resp := result.(*auth_pb.RegisterResponse)
 	api.SendJSON(w, http.StatusCreated, "success", RegisterHTTPResponse{
 		ID:           resp.Id,
 		Email:        resp.Email,
@@ -143,12 +173,20 @@ func (h *AuthHandler) GetMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := h.client.GetMe(r.Context(), &auth_pb.GetMeRequest{})
+	result, err := h.cb.Execute(func() (interface{}, error) {
+		return h.client.GetMe(r.Context(), &auth_pb.GetMeRequest{})
+	})
 	if err != nil {
+		if errors.Is(err, gobreaker.ErrOpenState) {
+			api.SendJSON(w, http.StatusServiceUnavailable, "error", "service unavailable. Try again later")
+			return
+		}
+
 		grpc.HandleGRPCError(w, err)
 		return
 	}
 
+	res := result.(*auth_pb.GetMeResponse)
 	api.SendJSON(w, http.StatusOK, "success", GetMeHTTPResponse{
 		Id:        res.Id,
 		Email:     res.Email,
