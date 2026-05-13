@@ -18,6 +18,7 @@ message GetMeResponse {
   string id = 1;
   string email = 2;
   string created_at = 3;
+  repeated string roles = 4;
 }
 
 message RefreshRequest {

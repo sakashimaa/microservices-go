@@ -43,6 +43,7 @@ func (s *GrpcServer) GetMe(ctx context.Context, req *auth_pb.GetMeRequest) (*aut
 		Id:        res.Id,
 		Email:     res.Email,
 		CreatedAt: res.CreatedAt.Format(time.RFC3339),
+		Roles:     res.Roles,
 	}, nil
 }
 

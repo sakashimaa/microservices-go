@@ -65,9 +65,13 @@ func (r *AuthPGRepo) DeleteExpiredTokens(ctx context.Context, limit int) error {
 
 func (r *AuthPGRepo) GetUserById(ctx context.Context, userId string) (*domain.User, error) {
 	query := `
-		SELECT id, email, created_at
-		FROM users
-		WHERE id = $1
+		SELECT u.id, u.email, u.created_at,
+			COALESCE(array_agg(r.code) FILTER (WHERE r.code IS NOT NULL), ARRAY[]::varchar[]) as roles
+		FROM users u
+		LEFT JOIN user_roles ur ON ur.user_id = u.id
+		LEFT JOIN roles r ON ur.role_id = r.id
+		WHERE u.id = $1
+		GROUP BY u.id
 	`
 
 	var res domain.User
@@ -79,6 +83,7 @@ func (r *AuthPGRepo) GetUserById(ctx context.Context, userId string) (*domain.Us
 		&res.Id,
 		&res.Email,
 		&res.CreatedAt,
+		&res.Roles,
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrUserNotFound
@@ -200,9 +205,13 @@ func (r *AuthPGRepo) SaveRefresh(ctx context.Context, data domain.SaveTokenParam
 
 func (r *AuthPGRepo) GetUserByEmail(ctx context.Context, data domain.GetUserByEmailParams) (*domain.User, error) {
 	query := `
-		SELECT id, email, password_hash, created_at
-		FROM users
-		WHERE email = $1
+		SELECT u.id, u.email, u.password_hash, u.created_at, 
+		       COALESCE(array_agg(r.code) FILTER (WHERE r.code IS NOT NULL), ARRAY[]::varchar[]) as roles
+		FROM users u
+		LEFT JOIN user_roles ur ON u.id = ur.user_id
+		LEFT JOIN roles r ON r.id = ur.role_id
+		WHERE u.email = $1
+		GROUP BY u.id
 	`
 
 	var result domain.User
@@ -210,7 +219,7 @@ func (r *AuthPGRepo) GetUserByEmail(ctx context.Context, data domain.GetUserByEm
 		ctx,
 		query,
 		data.Email,
-	).Scan(&result.Id, &result.Email, &result.Password, &result.CreatedAt); err != nil {
+	).Scan(&result.Id, &result.Email, &result.Password, &result.CreatedAt, &result.Roles); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrUserNotFound
 		}
@@ -248,9 +257,18 @@ func (r *AuthPGRepo) Register(ctx context.Context, data domain.CreateUserParams)
 		return nil, fmt.Errorf("insert user: %w", err)
 	}
 
+	insertRoleQuery := `
+		INSERT INTO user_roles (user_id, role_id)
+		VALUES ($1, (SELECT id FROM roles WHERE code = 'user'))
+	`
+	if _, err = tx.Exec(ctx, insertRoleQuery, result.Id); err != nil {
+		return nil, fmt.Errorf("assign default role: %w", err)
+	}
+
 	if err = tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("commit transaction: %w", err)
 	}
 
+	result.Roles = []string{"user"}
 	return &result, nil
 }

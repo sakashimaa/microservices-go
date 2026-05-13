@@ -44,17 +44,18 @@ func NewJWTManager(cfg config.AuthConfig) *Manager {
 }
 
 type Claims struct {
-	TokenType string `json:"token_type"`
+	TokenType string   `json:"token_type"`
+	Roles     []string `json:"roles,omitempty"`
 	jwt.RegisteredClaims
 }
 
 func (m *Manager) GeneratePair(user domain.User) (domain.TokenPair, error) {
-	accessToken, accessExpiresAt, err := m.generate(user.Id, TokenTypeAccess, m.accessTTL, m.privateKeyBytes)
+	accessToken, accessExpiresAt, err := m.generate(user.Id, TokenTypeAccess, m.accessTTL, m.privateKeyBytes, user.Roles)
 	if err != nil {
 		return domain.TokenPair{}, fmt.Errorf("generate access token: %w", err)
 	}
 
-	refreshToken, refreshExpiresAt, err := m.generate(user.Id, TokenTypeRefresh, m.refreshTTL, m.privateKeyBytes)
+	refreshToken, refreshExpiresAt, err := m.generate(user.Id, TokenTypeRefresh, m.refreshTTL, m.privateKeyBytes, user.Roles)
 	if err != nil {
 		return domain.TokenPair{}, fmt.Errorf("generate refresh token: %w", err)
 	}
@@ -67,7 +68,7 @@ func (m *Manager) GeneratePair(user domain.User) (domain.TokenPair, error) {
 	}, nil
 }
 
-func (m *Manager) generate(userID string, tokenType string, ttl time.Duration, privateKeyBytes []byte) (string, time.Time, error) {
+func (m *Manager) generate(userID string, tokenType string, ttl time.Duration, privateKeyBytes []byte, roles []string) (string, time.Time, error) {
 	now := m.now().UTC()
 	expiresAt := now.Add(ttl)
 
@@ -78,6 +79,7 @@ func (m *Manager) generate(userID string, tokenType string, ttl time.Duration, p
 
 	claims := Claims{
 		TokenType: tokenType,
+		Roles:     roles,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ID:        jti,
 			Subject:   userID,

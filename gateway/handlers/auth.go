@@ -12,9 +12,10 @@ import (
 )
 
 type GetMeHTTPResponse struct {
-	Id        string `json:"id"`
-	Email     string `json:"email"`
-	CreatedAt string `json:"created_at"`
+	Id        string   `json:"id"`
+	Email     string   `json:"email"`
+	CreatedAt string   `json:"created_at"`
+	Roles     []string `json:"roles"`
 }
 
 type RefreshRequest struct {
@@ -136,13 +137,13 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AuthHandler) GetMe(w http.ResponseWriter, r *http.Request) {
-	enrichedReq, err := middleware.ValidateToken(r, h.publicKey)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+	_, ok := r.Context().Value(middleware.UserIDKey).(string)
+	if !ok {
+		api.SendJSON(w, http.StatusUnauthorized, "error", "invalid user id")
 		return
 	}
 
-	res, err := h.client.GetMe(enrichedReq.Context(), &auth_pb.GetMeRequest{})
+	res, err := h.client.GetMe(r.Context(), &auth_pb.GetMeRequest{})
 	if err != nil {
 		grpc.HandleGRPCError(w, err)
 		return
@@ -152,5 +153,6 @@ func (h *AuthHandler) GetMe(w http.ResponseWriter, r *http.Request) {
 		Id:        res.Id,
 		Email:     res.Email,
 		CreatedAt: res.CreatedAt,
+		Roles:     res.Roles,
 	})
 }

@@ -6,7 +6,6 @@ import (
 	"net/http"
 
 	"github.com/sakashimaa/billing-microservice/contracts/gen/billing_pb"
-	"github.com/sakashimaa/billing-microservice/gateway/middleware"
 	"github.com/sakashimaa/billing-microservice/pkg/utils/api"
 	"github.com/sakashimaa/billing-microservice/pkg/utils/grpc"
 )
@@ -30,19 +29,13 @@ func NewBillingHandler(client billing_pb.BillingServiceClient, publicKey *rsa.Pu
 }
 
 func (h *BillingHandler) WithdrawalHandler(w http.ResponseWriter, r *http.Request) {
-	enrichedReq, err := middleware.ValidateToken(r, h.publicKey)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
-		return
-	}
-
 	var req billing_pb.WithdrawRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		api.SendJSON(w, http.StatusBadRequest, "error", "invalid json body")
 		return
 	}
 
-	resp, err := h.client.Withdraw(enrichedReq.Context(), &billing_pb.WithdrawRequest{
+	resp, err := h.client.Withdraw(r.Context(), &billing_pb.WithdrawRequest{
 		Amount:         req.Amount,
 		IdempotencyKey: req.IdempotencyKey,
 	})
@@ -55,19 +48,13 @@ func (h *BillingHandler) WithdrawalHandler(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *BillingHandler) DepositHandler(w http.ResponseWriter, r *http.Request) {
-	enrichedReq, err := middleware.ValidateToken(r, h.publicKey)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
-		return
-	}
-
 	var req BillingRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		api.SendJSON(w, http.StatusBadRequest, "error", "invalid json body")
 		return
 	}
 
-	resp, err := h.client.Deposit(enrichedReq.Context(), &billing_pb.DepositRequest{
+	resp, err := h.client.Deposit(r.Context(), &billing_pb.DepositRequest{
 		Amount:         req.Amount,
 		IdempotencyKey: req.IdempotencyKey,
 	})

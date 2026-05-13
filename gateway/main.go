@@ -1,21 +1,43 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/joho/godotenv"
+	"github.com/redis/go-redis/v9"
 	"github.com/sakashimaa/billing-microservice/contracts/gen/auth_pb"
 	"github.com/sakashimaa/billing-microservice/contracts/gen/billing_pb"
 	"github.com/sakashimaa/billing-microservice/gateway/handlers"
+	"github.com/sakashimaa/billing-microservice/gateway/middleware"
 	"github.com/sakashimaa/billing-microservice/pkg/utils/env"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
 func main() {
+	_ = godotenv.Load()
+
+	redisUrl := env.ParseEnvWithFallback("REDIS_URL", "localhost:6379")
+
+	rdb := redis.NewClient(&redis.Options{
+		Addr: redisUrl,
+	})
+	defer func() {
+		if err := rdb.Close(); err != nil {
+			log.Fatalf("failed to close redis: %v", err)
+		}
+	}()
+
+	if err := rdb.Ping(context.Background()).Err(); err != nil {
+		log.Fatalf("failed to ping redis: %v", err)
+	}
+
 	billingAddr := env.ParseEnvWithFallback("BILLING_ADDR", "localhost:50051")
 	authAddr := env.ParseEnvWithFallback("AUTH_ADDR", "localhost:50052")
 
@@ -57,16 +79,18 @@ func main() {
 
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("POST /deposit", billingHandler.DepositHandler)
-	mux.HandleFunc("POST /withdraw", billingHandler.WithdrawalHandler)
-
 	mux.HandleFunc("POST /register", authHandler.Register)
 	mux.HandleFunc("POST /login", authHandler.Login)
 	mux.HandleFunc("POST /refresh", authHandler.Refresh)
-	mux.HandleFunc("GET /me", authHandler.GetMe)
+
+	mux.Handle("GET /me", middleware.AuthMiddleware(publicKey)(http.HandlerFunc(authHandler.GetMe)))
+	mux.Handle("POST /deposit", middleware.AuthMiddleware(publicKey)(http.HandlerFunc(billingHandler.DepositHandler)))
+	mux.Handle("POST /withdraw", middleware.AuthMiddleware(publicKey)(http.HandlerFunc(billingHandler.WithdrawalHandler)))
+
+	globalHandler := middleware.RateLimitMiddleware(rdb, 50, time.Minute)(mux)
 
 	log.Println("Gateway started on :8080")
-	if err := http.ListenAndServe(":8080", mux); err != nil {
+	if err := http.ListenAndServe(":8080", globalHandler); err != nil {
 		log.Fatalf("failed to listen on :8080: %v\n", err)
 	}
 }

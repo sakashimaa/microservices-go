@@ -14,6 +14,21 @@ import (
 type contextKey string
 
 const UserIDKey contextKey = "user_id"
+const UserRolesKey contextKey = "user_roles"
+
+func AuthMiddleware(publicKey *rsa.PublicKey) func(handler http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			enrichedReq, err := ValidateToken(r, publicKey)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusUnauthorized)
+				return
+			}
+
+			next.ServeHTTP(w, enrichedReq)
+		})
+	}
+}
 
 func ValidateToken(r *http.Request, publicKey *rsa.PublicKey) (*http.Request, error) {
 	authHeader := r.Header.Get("Authorization")
@@ -56,8 +71,19 @@ func ValidateToken(r *http.Request, publicKey *rsa.PublicKey) (*http.Request, er
 		sub = subInter
 	}
 
+	var roles []string
+	if rolesClaim, ok := claims["roles"].([]interface{}); ok {
+		for _, r := range rolesClaim {
+			if roleStr, ok := r.(string); ok {
+				roles = append(roles, roleStr)
+			}
+		}
+	}
+
 	ctx := metadata.AppendToOutgoingContext(r.Context(), "x-user-id", sub)
+
 	ctx = context.WithValue(ctx, UserIDKey, sub)
+	ctx = context.WithValue(ctx, UserRolesKey, roles)
 
 	return r.WithContext(ctx), nil
 }

@@ -7,6 +7,7 @@ type User struct {
 	Email     string
 	Password  string
 	CreatedAt *time.Time
+	Roles     []string
 }
 
 type TokenPair struct {
@@ -92,4 +93,5 @@ type GetMeResponse struct {
 	Id        string
 	Email     string
 	CreatedAt *time.Time
+	Roles     []string
 }
