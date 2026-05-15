@@ -11,8 +11,9 @@ import (
 )
 
 type Config struct {
-	Auth     AuthConfig
-	RedisUrl string
+	Auth      AuthConfig
+	RedisUrl  string
+	BrokerUrl string
 }
 
 type AuthConfig struct {
@@ -50,6 +51,7 @@ func Load() (Config, error) {
 
 	issuer := env.ParseEnvWithFallback("AUTH_ISSUER", "billing-auth-microservice")
 	redisUrl := env.ParseEnvWithFallback("REDIS_URL", "localhost:6379")
+	brokerUrl := env.ParseEnvWithFallback("BROKER_URL", "")
 
 	privateKeyBytes, err := os.ReadFile("private.pem")
 	if err != nil {
@@ -57,7 +59,8 @@ func Load() (Config, error) {
 	}
 
 	return Config{
-		RedisUrl: redisUrl,
+		RedisUrl:  redisUrl,
+		BrokerUrl: brokerUrl,
 		Auth: AuthConfig{
 			AccessSecret:    accessSecret,
 			RefreshSecret:   refreshSecret,

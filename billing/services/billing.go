@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sakashimaa/billing-microservice/billing/domain"
 	"github.com/sakashimaa/billing-microservice/billing/repository"
+	"github.com/sakashimaa/billing-microservice/pkg/outbox"
 )
 
 var (
@@ -22,16 +23,18 @@ type BillingService interface {
 	Withdraw(ctx context.Context, req domain.WithdrawRequest) error
 }
 
-func NewBillingService(db *pgxpool.Pool, repo repository.BillingRepository) BillingService {
+func NewBillingService(db *pgxpool.Pool, repo repository.BillingRepository, outboxRepo outbox.Repository) BillingService {
 	return &BillingPGService{
-		db:   db,
-		repo: repo,
+		db:         db,
+		repo:       repo,
+		outboxRepo: outboxRepo,
 	}
 }
 
 type BillingPGService struct {
-	db   *pgxpool.Pool
-	repo repository.BillingRepository
+	db         *pgxpool.Pool
+	repo       repository.BillingRepository
+	outboxRepo outbox.Repository
 }
 
 func (s *BillingPGService) Deposit(ctx context.Context, req domain.DepositRequest) error {
@@ -74,7 +77,7 @@ func (s *BillingPGService) Deposit(ctx context.Context, req domain.DepositReques
 		"timestamp": time.Now().UTC().Format(time.RFC3339),
 	}
 
-	err = s.repo.InsertOutboxEventTx(ctx, tx, "AccountToppedUp", accountId, payload)
+	err = s.outboxRepo.InsertOutboxEventTx(ctx, tx, "AccountToppedUp", accountId, payload)
 	if err != nil {
 		return fmt.Errorf("failed to write outbox: %w", err)
 	}

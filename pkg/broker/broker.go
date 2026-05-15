@@ -6,26 +6,22 @@ import (
 	"fmt"
 
 	amqp "github.com/rabbitmq/amqp091-go"
-	"github.com/sakashimaa/billing-microservice/billing/domain"
+	"github.com/sakashimaa/billing-microservice/pkg/outbox"
 )
-
-type EventPublisher interface {
-	Publish(ctx context.Context, event *domain.OutboxEvent) error
-}
 
 type RabbitPublisher struct {
 	channel  *amqp.Channel
 	exchange string
 }
 
-func NewRabbitPublisher(channel *amqp.Channel, exchange string) EventPublisher {
+func NewRabbitPublisher(channel *amqp.Channel, exchange string) outbox.EventPublisher {
 	return &RabbitPublisher{
 		channel:  channel,
 		exchange: exchange,
 	}
 }
 
-func (p *RabbitPublisher) Publish(ctx context.Context, event *domain.OutboxEvent) error {
+func (p *RabbitPublisher) Publish(ctx context.Context, event *outbox.Event) error {
 	body, err := json.Marshal(event.Payload)
 	if err != nil {
 		return fmt.Errorf("failed to marshal payload: %w", err)

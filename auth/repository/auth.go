@@ -17,7 +17,7 @@ var (
 )
 
 type AuthRepository interface {
-	Register(ctx context.Context, data domain.CreateUserParams) (*domain.User, error)
+	RegisterTx(ctx context.Context, tx pgx.Tx, data domain.CreateUserParams) (*domain.User, error)
 	GetUserByEmail(ctx context.Context, data domain.GetUserByEmailParams) (*domain.User, error)
 	SaveRefresh(ctx context.Context, data domain.SaveTokenParams) error
 	SaveRefreshTx(ctx context.Context, tx pgx.Tx, data domain.SaveTokenParams) error
@@ -230,17 +230,7 @@ func (r *AuthPGRepo) GetUserByEmail(ctx context.Context, data domain.GetUserByEm
 	return &result, nil
 }
 
-func (r *AuthPGRepo) Register(ctx context.Context, data domain.CreateUserParams) (*domain.User, error) {
-	tx, err := r.db.Begin(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to start transaction: %w", err)
-	}
-	defer func() {
-		if rollbackErr := tx.Rollback(ctx); rollbackErr != nil && !errors.Is(err, pgx.ErrTxClosed) {
-			fmt.Printf("rollback register transaction: %v\n", err)
-		}
-	}()
-
+func (r *AuthPGRepo) RegisterTx(ctx context.Context, tx pgx.Tx, data domain.CreateUserParams) (*domain.User, error) {
 	insertUserQuery := `
 		INSERT INTO users (email, password_hash)
 		VALUES ($1, $2)
@@ -249,7 +239,7 @@ func (r *AuthPGRepo) Register(ctx context.Context, data domain.CreateUserParams)
 	`
 
 	var result domain.User
-	if err = tx.QueryRow(ctx, insertUserQuery, data.Email, data.PasswordHash).Scan(&result.Id, &result.Email, &result.Password, &result.CreatedAt); err != nil {
+	if err := tx.QueryRow(ctx, insertUserQuery, data.Email, data.PasswordHash).Scan(&result.Id, &result.Email, &result.Password, &result.CreatedAt); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrUserAlreadyExists
 		}
@@ -261,12 +251,8 @@ func (r *AuthPGRepo) Register(ctx context.Context, data domain.CreateUserParams)
 		INSERT INTO user_roles (user_id, role_id)
 		VALUES ($1, (SELECT id FROM roles WHERE code = 'user'))
 	`
-	if _, err = tx.Exec(ctx, insertRoleQuery, result.Id); err != nil {
+	if _, err := tx.Exec(ctx, insertRoleQuery, result.Id); err != nil {
 		return nil, fmt.Errorf("assign default role: %w", err)
-	}
-
-	if err = tx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("commit transaction: %w", err)
 	}
 
 	result.Roles = []string{"user"}

@@ -16,9 +16,10 @@ type contextKey string
 const UserIDKey contextKey = "user_id"
 
 var publicHandlers = map[string]struct{}{
-	"/auth.AuthService/Login":    {},
-	"/auth.AuthService/Register": {},
-	"/auth.AuthService/Refresh":  {},
+	"/auth.AuthService/Login":       {},
+	"/auth.AuthService/Register":    {},
+	"/auth.AuthService/Refresh":     {},
+	"/auth.AuthService/GetUserById": {},
 }
 
 func AuthInterceptor() grpc.UnaryServerInterceptor {

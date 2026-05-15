@@ -9,6 +9,17 @@ service AuthService {
   rpc Login (LoginRequest) returns (LoginResponse);
   rpc Refresh (RefreshRequest) returns (RefreshResponse);
   rpc GetMe (GetMeRequest) returns (GetMeResponse);
+  rpc GetUserById (GetUserByIdRequest) returns (GetUserByIdResponse);
+}
+
+message GetUserByIdRequest {
+  string user_id = 1;
+}
+
+message GetUserByIdResponse {
+  string id = 1;
+  string email = 2;
+  string created_at = 3;
 }
 
 message GetMeRequest {

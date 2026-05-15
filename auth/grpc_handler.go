@@ -25,6 +25,22 @@ func NewGRPCHandler(service services.AuthService) *GrpcServer {
 	}
 }
 
+func (s *GrpcServer) GetUserById(ctx context.Context, req *auth_pb.GetUserByIdRequest) (*auth_pb.GetUserByIdResponse, error) {
+	res, err := s.service.GetUserById(ctx, domain.GetUserByIdRequest{
+		UserId: req.UserId,
+	})
+	if err != nil {
+		err = s.handleGrpcErr(ctx, err)
+		return nil, err
+	}
+
+	return &auth_pb.GetUserByIdResponse{
+		Id:        res.Id,
+		Email:     res.Email,
+		CreatedAt: res.CreatedAt.Format(time.RFC3339),
+	}, nil
+}
+
 func (s *GrpcServer) GetMe(ctx context.Context, req *auth_pb.GetMeRequest) (*auth_pb.GetMeResponse, error) {
 	userID, err := interceptors.UserIdFromContext(ctx)
 	if err != nil {

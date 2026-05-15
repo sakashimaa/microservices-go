@@ -58,15 +58,3 @@ type WithdrawAccountParams struct {
 	Amount int64
 	Id     string
 }
-
-type OutboxEvent struct {
-	Id            int64
-	AggregateType string
-	AggregateId   string
-	EventType     string
-	Payload       map[string]any
-	Status        string
-	ErrorText     *string
-	CreatedAt     *time.Time
-	ProcessedAt   *time.Time
-}

@@ -10,12 +10,12 @@ import (
 
 	"github.com/joho/godotenv"
 	amqp "github.com/rabbitmq/amqp091-go"
-	"github.com/sakashimaa/billing-microservice/billing/lib/broker"
-	"github.com/sakashimaa/billing-microservice/billing/lib/workers"
 	"github.com/sakashimaa/billing-microservice/billing/repository"
 	"github.com/sakashimaa/billing-microservice/billing/services"
 	"github.com/sakashimaa/billing-microservice/contracts/gen/billing_pb"
+	"github.com/sakashimaa/billing-microservice/pkg/broker"
 	"github.com/sakashimaa/billing-microservice/pkg/infrastructure/interceptors"
+	"github.com/sakashimaa/billing-microservice/pkg/outbox"
 	"github.com/sakashimaa/billing-microservice/pkg/utils/env"
 	"github.com/sakashimaa/billing-microservice/pkg/utils/storage"
 	"google.golang.org/grpc"
@@ -51,8 +51,10 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, os.Interrupt)
 	defer stop()
 
+	outboxRepo := outbox.NewPgxRepository(pool)
+
 	billingRepo := repository.NewBillingRepo(pool)
-	svc := services.NewBillingService(pool, billingRepo)
+	svc := services.NewBillingService(pool, billingRepo, outboxRepo)
 	billingAdapter := NewGRPCServer(svc)
 
 	ch, err := conn.Channel()
@@ -81,8 +83,8 @@ func main() {
 
 	rabbitPublisher := broker.NewRabbitPublisher(ch, exchangeName)
 
-	outboxWorker := workers.NewOutboxWorker(ctx, billingRepo, rabbitPublisher)
-	go outboxWorker.StartOutboxWorker()
+	outboxWorker := outbox.NewOutboxWorker(outboxRepo, rabbitPublisher)
+	go outboxWorker.StartOutboxWorker(context.Background())
 
 	grpcServer := grpc.NewServer(
 		grpc.UnaryInterceptor(interceptors.AuthInterceptor()),

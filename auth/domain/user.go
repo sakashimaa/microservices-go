@@ -95,3 +95,13 @@ type GetMeResponse struct {
 	CreatedAt *time.Time
 	Roles     []string
 }
+
+type GetUserByIdRequest struct {
+	UserId string
+}
+
+type GetUserByIdResponse struct {
+	Id        string
+	Email     string
+	CreatedAt *time.Time
+}

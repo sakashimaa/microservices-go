@@ -24,9 +24,6 @@ type BillingRepository interface {
 	GetAccountByUserIdTx(ctx context.Context, tx pgx.Tx, params domain.GetAccountByUserIdParams) (*domain.Account, error)
 	FindByIdempotencyKey(ctx context.Context, params domain.FindByIdempotencyKeyParams) (*domain.Transaction, error)
 	WithdrawAccountTx(ctx context.Context, tx pgx.Tx, params domain.WithdrawAccountParams) error
-	InsertOutboxEventTx(ctx context.Context, tx pgx.Tx, eventType, aggregateId string, payload any) error
-	QueryOutboxEventsTx(ctx context.Context, tx pgx.Tx, limit int) ([]*domain.OutboxEvent, error)
-	MarkEventsAsProcessedTx(ctx context.Context, tx pgx.Tx, eventIds []int64) (int64, error)
 	BeginTx(ctx context.Context) (pgx.Tx, error)
 }
 
@@ -62,59 +59,6 @@ func (r *BillingPGRepo) BeginTx(ctx context.Context) (pgx.Tx, error) {
 	}
 
 	return tx, nil
-}
-
-func (r *BillingPGRepo) QueryOutboxEventsTx(ctx context.Context, tx pgx.Tx, limit int) ([]*domain.OutboxEvent, error) {
-	query := `
-		SELECT id, aggregate_type, aggregate_id, event_type,
-				payload, status, error_text, processed_at
-		FROM outbox_events
-		WHERE status = 'PENDING'
-		ORDER BY id ASC
-		LIMIT $1
-		FOR UPDATE SKIP LOCKED
-	`
-
-	rows, err := tx.Query(ctx, query, limit)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query outbox: %w", err)
-	}
-	defer rows.Close()
-
-	var res []*domain.OutboxEvent
-	for rows.Next() {
-		var e domain.OutboxEvent
-		if err := rows.Scan(
-			&e.Id,
-			&e.AggregateType,
-			&e.AggregateId,
-			&e.EventType,
-			&e.Payload,
-			&e.Status,
-			&e.ErrorText,
-			&e.ProcessedAt,
-		); err != nil {
-			return nil, fmt.Errorf("scan failed: %w", err)
-		}
-
-		res = append(res, &e)
-	}
-
-	return res, nil
-}
-
-func (r *BillingPGRepo) InsertOutboxEventTx(ctx context.Context, tx pgx.Tx, eventType, aggregateId string, payload any) error {
-	query := `
-		INSERT INTO outbox_events (aggregate_type, aggregate_id, event_type, payload)
-		VALUES ('account', $1, $2, $3)
-	`
-
-	_, err := tx.Exec(ctx, query, aggregateId, eventType, payload)
-	if err != nil {
-		return fmt.Errorf("insert outbox: %w", err)
-	}
-
-	return nil
 }
 
 func (r *BillingPGRepo) WithdrawAccountTx(ctx context.Context, tx pgx.Tx, params domain.WithdrawAccountParams) error {
